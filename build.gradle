@@ -1,0 +1,67 @@
+plugins {
+    id 'java-library'
+    id 'net.minecraftforge.gradle' version '6.0.54'
+    id 'org.parchmentmc.librarian.forgegradle' version '1.+'
+}
+version = '1.0.4-forge-1.20.1'
+group = 'dev.meinfinity'
+base { archivesName = 'me-infinity-cell-editor' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+minecraft {
+    mappings channel: 'parchment', version: '2023.09.03-1.20.1'
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', project.file('build/createSrgToMcp/output.srg').absolutePath
+            if(!project.hasProperty('standaloneSmoke')) mods { me_infinity_editor { source sourceSets.main } }
+        }
+        client {}
+        server { args '--nogui' }
+    }
+}
+repositories {
+    maven { url = uri('.cached-maven') }
+    mavenCentral()
+    maven { url = 'https://maven.architectury.dev' }
+    maven { url = 'https://api.modrinth.com/maven' }
+    maven { url = 'https://cursemaven.com' }
+}
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.4.0'
+    implementation fg.deobf('curse.maven:applied-energistics-2-223794:7148487') // AE2 Forge 15.4.10
+    implementation fg.deobf('maven.modrinth:kubejs:hVR2xUSr')
+    runtimeOnly fg.deobf('maven.modrinth:rhino:uNALdylI')
+    runtimeOnly fg.deobf('curse.maven:guideme-1173950:6679102')
+    runtimeOnly fg.deobf('dev.architectury:architectury-forge:9.1.12')
+    compileOnly fg.deobf('curse.maven:jei-238222:7037120')
+    if (!project.hasProperty('withoutJei')) runtimeOnly fg.deobf('curse.maven:jei-238222:7037120')
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.named('jar').configure { finalizedBy 'reobfJar' }
+// Isolated runtime checks, never included in the distributable JAR.
+if (project.hasProperty('smoke')) {
+    sourceSets {
+        smoke {
+            java.setSrcDirs(['src/smoke/java'])
+            resources.setSrcDirs(['src/smoke/resources'])
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+        }
+        standaloneSmoke {
+            java.setSrcDirs(['src/standaloneSmoke/java'])
+            resources.setSrcDirs(['src/standaloneSmoke/resources'])
+            compileClasspath += sourceSets.main.compileClasspath
+            runtimeClasspath += sourceSets.main.runtimeClasspath
+        }
+    }
+    minecraft.runs.client {
+        if(project.hasProperty('standaloneSmoke')) mods { me_infinity_standalone_check { source sourceSets.standaloneSmoke } }
+        else mods { me_infinity_smoke { source sourceSets.smoke } }
+        property 'meInfinity.smokeWorld', project.hasProperty('smokeWorld').toString()
+        property 'meInfinity.catalogSmoke', project.hasProperty('catalogSmoke').toString()
+        property 'meInfinity.standaloneSmoke', project.hasProperty('standaloneSmoke').toString()
+        args '--width', '1280', '--height', '800'
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn project.hasProperty('standaloneSmoke')?'standaloneSmokeClasses':'smokeClasses' }
+}

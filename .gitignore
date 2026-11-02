@@ -1,0 +1,16 @@
+.gradle/
+build/
+run/
+*.log
+.cached-maven/
+backups/
+dist/
+preview/
+validation/
+examples/
+VALIDATION.md
+*.zip
+*.tmp
+*.hprof
+.idea/
+*.iml
