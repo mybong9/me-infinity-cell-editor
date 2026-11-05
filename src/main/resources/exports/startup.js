@@ -13,6 +13,26 @@
   var Component = Java.loadClass('net.minecraft.network.chat.Component');
   var Long = Java.loadClass('java.lang.Long');
   var NBTUtils = Java.loadClass('dev.latvian.mods.rhino.mod.util.NBTUtils');
+  var StringTag = Java.loadClass('net.minecraft.nbt.StringTag');
+  var ForgeRegistries = Java.loadClass('net.minecraftforge.registries.ForgeRegistries');
+  function itemFilter(expression) {
+    return global.meInfinityCompileSelector(expression, function(tag) {
+      var ingredient = Ingredient.of(tag);
+      return function(id) { return ingredient.test(Item.of(id)); };
+    });
+  }
+  // Accept old SNBT entries as well as editable, portable catalogue definitions.
+  global.meInfinityCell = function(definition) {
+    if (definition === null || definition === undefined) throw new Error('Missing ME infinity catalogue entry');
+    var legacy = definition.nbt === undefined || definition.nbt === null;
+    var cell = Item.of(ID, 1, String(legacy ? definition : definition.nbt));
+    var expression = legacy ? '' : String(definition.itemSelector || '').trim();
+    if (expression) {
+      itemFilter(expression);
+      NBTUtils.accessTagMap(cell.nbt).put('ItemSelector', StringTag.valueOf(expression));
+    }
+    return cell;
+  };
   StartupEvents.registry('item', event => {
     event.create(ID).displayName('ME 自定义无限元件').maxStackSize(1).texture('ae2:item/creative_item_cell');
   });
@@ -35,6 +55,18 @@
               var resourceKey = AEKey.fromTagGeneric(extra.get(n));
               if (resourceKey !== null && !keys.some(k => k.equals(resourceKey))) keys.push(resourceKey);
             } catch (error) { console.warn('ME resource type unavailable; retain the required AE2 resource bridge: ' + error); }
+          }
+          var selector = NBTUtils.accessTagMap(stack.nbt).get('ItemSelector');
+          if (selector) {
+            var matches = itemFilter(String(selector.getAsString()));
+            var iterator = ForgeRegistries.ITEMS.getKeys().iterator();
+            while (iterator.hasNext()) {
+              var id = String(iterator.next());
+              if (id !== 'minecraft:air' && matches(id)) {
+                var selectedKey = AEItemKey.of(Item.of(id));
+                if (selectedKey !== null && !keys.some(k => k.equals(selectedKey))) keys.push(selectedKey);
+              }
+            }
           }
         }
         // Rhino skips interface default methods. Extend AE2's concrete handler so

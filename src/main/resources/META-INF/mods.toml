@@ -3,7 +3,7 @@ loaderVersion="[47,)"
 license="All Rights Reserved"
 [[mods]]
 modId="me_infinity_editor"
-version="1.0.4"
+version="1.0.5"
 displayName="ME无限原件编辑"
 description='''多物品 NBT 无限元件、可视化配方与 KubeJS 导出。'''
 [[dependencies.me_infinity_editor]]

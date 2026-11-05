@@ -2,6 +2,45 @@
 
 独立 Forge 1.20.1 模组。选择多种物品、流体或 Mek 化学资源，生成可装入 AE2 ME 驱动器的无限供给元件，并编辑、导出独立 KubeJS 脚本。物品和流体按 NBT 精确区分。
 
+## 1.0.5 跨整合包迁移和物品表达式
+
+导出后，将以下文件按相同相对路径复制到另一整合包的 `kubejs` 文件夹。无需复制原整合包的绝对路径、草稿或编辑器 JAR：
+
+- `startup_scripts/me_infinity_selectors.js`
+- `startup_scripts/me_infinity_runtime.js`
+- `client_scripts/me_infinity_catalog.js`（JEI 可选）
+- `server_scripts/me_infinity_editor/` 中需要的元件脚本
+- `config/me_infinity_editor/catalog.json`
+
+目标整合包必须是 Forge 1.20.1，并安装 AE2 15.4.10+、KubeJS 6 及其前置；物品、流体、化学资源和配方所需的模组也必须存在。化学品仍需要 Mekanism 和 Applied Mekanistics。首次安装或更新启动脚本后，完全退出并重启游戏；多人游戏服务端也需安装，使用 JEI 时客户端同步这些文件。合并已有 `catalog.json` 时按元件 ID 合并，不要覆盖目标包的其他元件。
+
+在 `config/me_infinity_editor/catalog.json` 对应元件中编辑 `itemSelector`，例如：
+
+```json
+{
+  "my_infinity_cell": {
+    "nbt": "{Items:[],Keys:[],display:{Name:'{\"text\":\"通配符无限元件\"}'}}",
+    "itemSelector": "(minecraft:*_planks | #forge:ingots) & !minecraft:gold_ingot"
+  }
+}
+```
+
+`nbt` 保留编辑器导出的原值即可；其中精确选择的物品及 NBT、流体和化学资源仍会供给。`itemSelector` 额外选择不带 NBT 的物品，匹配目标整合包的当前物品注册表与标签，不会把原整合包的匹配结果写死。空字符串表示不额外选择物品；旧版直接保存 SNBT 字符串的目录条目仍可使用。重新导出同一 ID 时保留已填写的表达式。
+
+| 写法 | 含义 |
+| --- | --- |
+| `minecraft:diamond` | 精确物品 ID，省略命名空间时使用 `minecraft` |
+| `thermal:*`、`*:copper_ingot` | `*` 匹配任意长度，`?` 匹配单个字符 |
+| `#forge:ingots` | 精确物品标签 ID，标签名本身不支持通配符 |
+| `a | b`、`a || b` | 或 |
+| `a & b`、`a && b` | 且 |
+| `!a` | 非 |
+| `(a | b) & !c` | 括号分组，默认优先级为非、且、或 |
+
+例如 `thermal:* & !thermal:*_spawn_egg`；也可只排除：`* & !minecraft:*_spawn_egg`。表达式不会修改已有精确资源列表，排除条件只作用于表达式匹配的物品。精确资源列表仍为最多 256 种；表达式展开不截断为 256 种，`*` 可能使终端列出整个整合包的物品。不存在的 ID 或标签不会产生匹配，语法错误会在 KubeJS 中报告。
+
+修改目录后执行 `/reload` 更新配方和 JEI，重新获取元件。表达式写入新元件 NBT，旧元件不会自动换成新的表达式。表达式仅选择物品；流体和化学品继续使用编辑器的精确资源选择。
+
 ## 1.0.4 多资源支持
 
 - 同一元件可混合保存物品、流体、气体、灌注、颜料、浆液，总上限为 256 种。

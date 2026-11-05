@@ -48,13 +48,26 @@ public final class DocumentFiles {
         if(value.isJsonArray()) { JsonArray arr=new JsonArray();value.getAsJsonArray().forEach(e -> arr.add(replaceOutput(e,output)));return arr; }
         return value.deepCopy();
     }
+    private static String recipeExpression(JsonElement value,JsonObject output) {
+        if(value.equals(output))return "outputJson";
+        if(value.isJsonObject()) {
+            List<String> fields=new ArrayList<>();
+            value.getAsJsonObject().entrySet().forEach(e -> fields.add(quote(e.getKey())+":"+recipeExpression(e.getValue(),output)));
+            return "{"+String.join(",",fields)+"}";
+        }
+        if(value.isJsonArray()) {
+            List<String> entries=new ArrayList<>();value.getAsJsonArray().forEach(e -> entries.add(recipeExpression(e,output)));
+            return "["+String.join(",",entries)+"]";
+        }
+        return GSON.toJson(value);
+    }
     public static String script(CellDocument doc) {
         doc.validate(); ItemStack stack=doc.output();
         JsonObject output=new JsonObject();output.addProperty("item","kubejs:me_infinity_cell");output.addProperty("count",1);output.addProperty("nbt",stack.getTag().toString());
         StringBuilder code=new StringBuilder("// Standalone AE2 + KubeJS export. The editor JAR is optional.\n// Install startup/client scripts and restart once; later changes use /reload.\n");
-        code.append("ServerEvents.recipes(event => {\n  const output = Item.of('kubejs:me_infinity_cell', 1, ").append(quote(stack.getTag().toString())).append(");\n");
+        code.append("// Edit itemSelector in kubejs/config/me_infinity_editor/catalog.json.\nServerEvents.recipes(event => {\n  const catalogue = JsonIO.read('kubejs/config/me_infinity_editor/catalog.json');\n  const output = global.meInfinityCell(catalogue[").append(quote(doc.id)).append("]);\n  const outputJson = {item: 'kubejs:me_infinity_cell', count: 1, nbt: output.nbt.toString()};\n");
         JsonObject catalog=new JsonObject();catalog.addProperty("type","me_infinity_editor:catalog");catalog.add("result",output.deepCopy());
-        code.append("  if (Platform.isLoaded('me_infinity_editor')) event.custom(").append(GSON.toJson(catalog)).append(").id(").append(quote("me_infinity_editor:"+doc.id+"_catalog")).append(");\n");
+        code.append("  if (Platform.isLoaded('me_infinity_editor')) event.custom(").append(recipeExpression(catalog,output)).append(").id(").append(quote("me_infinity_editor:"+doc.id+"_catalog")).append(");\n");
         for(int i=0;i<doc.recipes.size();i++) {
             var recipe=doc.recipes.get(i); JsonObject json=new JsonObject();
             List<ItemStack> inputs=Arrays.stream(recipe.grid).filter(s -> !s.isEmpty()).toList();
@@ -98,18 +111,22 @@ public final class DocumentFiles {
                 }
                 json.add("result",output.deepCopy());
             }
-            code.append("  event.custom(").append(GSON.toJson(json)).append(").id(").append(quote("me_infinity_editor:"+doc.id+"_"+i)).append(");\n");
+            code.append("  event.custom(").append(recipeExpression(json,output)).append(").id(").append(quote("me_infinity_editor:"+doc.id+"_"+i)).append(");\n");
         }
         code.append("});\n");return code.toString();
     }
     public static Path export(CellDocument doc) throws IOException {
         String script=script(doc); save(doc);
         Path root=FMLPaths.GAMEDIR.get();
+        writeTemplate(root.resolve("kubejs/startup_scripts/me_infinity_selectors.js"),"selectors.js");
         writeTemplate(root.resolve("kubejs/startup_scripts/me_infinity_runtime.js"),"startup.js");
         writeTemplate(root.resolve("kubejs/client_scripts/me_infinity_catalog.js"),"client.js");
         Path catalogue=root.resolve("kubejs/config/me_infinity_editor/catalog.json");
         JsonObject data=Files.exists(catalogue)?JsonParser.parseString(Files.readString(catalogue)).getAsJsonObject():new JsonObject();
-        data.addProperty(doc.id,doc.output().getTag().toString());write(catalogue,GSON.toJson(data));
+        JsonObject definition=new JsonObject();definition.addProperty("nbt",doc.output().getTag().toString());
+        var previous=data.get(doc.id);
+        definition.addProperty("itemSelector",previous!=null && previous.isJsonObject() && previous.getAsJsonObject().has("itemSelector")?previous.getAsJsonObject().get("itemSelector").getAsString():"");
+        data.add(doc.id,definition);write(catalogue,GSON.toJson(data));
         Path file=exports().resolve(doc.id+".js");
         write(file,script); return file;
     }
